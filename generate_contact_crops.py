@@ -31,7 +31,8 @@ import numpy as np
 
 # Moduli della pipeline (cartella sorella ../tti_pipeline)
 _HERE = os.path.dirname(os.path.abspath(__file__))
-sys.path.insert(0, os.path.join(_HERE, "..", "tti_pipeline"))
+_TTI  = os.path.abspath(os.path.join(_HERE, "..", "tti_pipeline"))
+sys.path.insert(0, _TTI)
 
 from config import CFG                          # noqa: E402
 from models.loader import load_models           # noqa: E402
@@ -78,6 +79,12 @@ def main():
     ap.add_argument("--crop_size", type=int, default=224)
     ap.add_argument("--context_max", type=int, default=640)
     args = ap.parse_args()
+
+    # Path assoluti PRIMA di cambiare cartella; poi entro in tti_pipeline così i
+    # pesi relativi di config.py ("checkpoints/...") si risolvono correttamente.
+    args.data_root = os.path.abspath(args.data_root)
+    args.out       = os.path.abspath(args.out)
+    os.chdir(_TTI)
 
     videos_dir = os.path.join(args.data_root, "videos", args.split)
     labels_dir = os.path.join(args.data_root, "labels", args.split)
