@@ -1,0 +1,10 @@
+# Dati di annotazione: le immagini NON vanno in git (troppe/grandi).
+# I JSON di label invece sì, sono piccoli e sono il deliverable.
+contact_data/crops/
+contact_data/context/
+contact_data/*.npy
+
+# Python
+__pycache__/
+*.pyc
+.ipynb_checkpoints/
