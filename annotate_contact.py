@@ -81,7 +81,8 @@ class Annotator:
         w, h = im.size
         s = maxside / max(w, h)
         if s != 1.0:
-            im = im.resize((int(w * s), int(h * s)))
+            # LANCZOS = nitido sia in ingrandimento sia in riduzione (no sfocatura)
+            im = im.resize((int(w * s), int(h * s)), Image.LANCZOS)
         ph = ImageTk.PhotoImage(im)
         self._photo.append(ph)
         return ph
@@ -101,8 +102,8 @@ class Annotator:
             f"etichettati: {len(self.labels)}  (contatto {n_c} / no {n_n})  skip {len(self.skips)}\n"
             f"  video: {rec['video']}   frame: {rec['frame_idx']}   tool: {rec['tool_type']}"
         ))
-        ctx  = self._load_img(rec["context"], 560)
-        crop = self._load_img(rec["crop"], 360)
+        ctx  = self._load_img(rec["context"], 640)   # context nativo ~640 → nitido
+        crop = self._load_img(rec["crop"], 300)       # crop 224 → ingrandimento moderato
         self.lbl_ctx.config(image=ctx if ctx else "")
         self.lbl_crop.config(image=crop if crop else "")
 
