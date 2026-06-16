@@ -132,6 +132,8 @@ def main():
     ap.add_argument("--lr", type=float, default=1e-4)
     ap.add_argument("--val_frac", type=float, default=0.2)
     ap.add_argument("--seed", type=int, default=0)
+    ap.add_argument("--workers", type=int, default=0,
+                    help="worker DataLoader; 0 evita errori di shared memory nei container")
     ap.add_argument("--out", default="checkpoints/contact_resnet18.pt")
     args = ap.parse_args()
 
@@ -149,9 +151,9 @@ def main():
     print(f"Train: {len(train_s)} (contact {n_pos} / no_contact {n_neg})  Val: {len(val_s)}")
 
     train_dl = DataLoader(ContactCrops(args.data, train_s, True),
-                          batch_size=args.batch, shuffle=True, num_workers=4, pin_memory=True)
+                          batch_size=args.batch, shuffle=True, num_workers=args.workers, pin_memory=True)
     val_dl   = DataLoader(ContactCrops(args.data, val_s, False),
-                          batch_size=args.batch, shuffle=False, num_workers=4, pin_memory=True)
+                          batch_size=args.batch, shuffle=False, num_workers=args.workers, pin_memory=True)
 
     # ResNet18 pre-addestrata (fallback se manca internet)
     try:
