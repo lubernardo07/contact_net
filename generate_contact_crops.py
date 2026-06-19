@@ -77,7 +77,11 @@ def main():
     ap.add_argument("--frames_per_video", type=int, default=10)
     ap.add_argument("--max_videos", type=int, default=0, help="0 = tutti")
     ap.add_argument("--crop_size", type=int, default=224)
-    ap.add_argument("--context_max", type=int, default=640)
+    ap.add_argument("--zoom_size", type=int, default=384,
+                    help="vista locale (nativa, non ingrandita) attorno alla punta, per annotare a occhio")
+    ap.add_argument("--context_max", type=int, default=1280)
+    ap.add_argument("--append", action="store_true",
+                    help="aggiunge ai crop/manifest esistenti saltando gli id già presenti (tiene labels.json)")
     args = ap.parse_args()
 
     # Path assoluti PRIMA di cambiare cartella; poi entro in tti_pipeline così i
@@ -95,8 +99,17 @@ def main():
 
     crops_dir = os.path.join(args.out, "crops")
     ctx_dir   = os.path.join(args.out, "context")
+    zoom_dir  = os.path.join(args.out, "zoom")
     os.makedirs(crops_dir, exist_ok=True)
     os.makedirs(ctx_dir,   exist_ok=True)
+    os.makedirs(zoom_dir,  exist_ok=True)
+
+    manifest_path = os.path.join(args.out, "manifest.json")
+    existing, existing_ids = [], set()
+    if args.append and os.path.isfile(manifest_path):
+        existing = json.load(open(manifest_path))
+        existing_ids = {r["id"] for r in existing}
+        print(f"── append: {len(existing)} record esistenti — salto gli id già presenti")
 
     print("── Caricamento modelli (serve solo YOLO)…")
     yolo, _predictor, _vit, _depth, _device = load_models()
@@ -138,7 +151,15 @@ def main():
                     continue
 
                 rid = f"{stem}_f{fidx:06d}_t{di}"
+                if rid in existing_ids:
+                    continue
                 cv2.imwrite(os.path.join(crops_dir, rid + ".jpg"), crop)
+
+                # zoom: finestra più ampia attorno alla punta a risoluzione NATIVA
+                # (non ingrandita → nitida). Serve solo per annotare a occhio.
+                zoom, _ = crop_around_point(frame, tip[0], tip[1], args.zoom_size)
+                if zoom.size:
+                    cv2.imwrite(os.path.join(zoom_dir, rid + ".jpg"), zoom)
 
                 ctx = frame.copy()
                 cv2.rectangle(ctx, (x1, y1), (x2, y2), (0, 255, 255), 2)
@@ -151,6 +172,7 @@ def main():
                 manifest.append({
                     "id":         rid,
                     "crop":       f"crops/{rid}.jpg",
+                    "zoom":       f"zoom/{rid}.jpg",
                     "context":    f"context/{rid}.jpg",
                     "video":      stem,
                     "frame_idx":  fidx,
@@ -160,9 +182,10 @@ def main():
         cap.release()
         print(f"  [{vi+1}/{len(vids)}] {stem}: +{len(manifest)-n_before} crop  (tot {len(manifest)})")
 
-    with open(os.path.join(args.out, "manifest.json"), "w") as f:
-        json.dump(manifest, f, indent=2)
-    print(f"\n── Fatto: {len(manifest)} crop in {args.out}/  (manifest.json)")
+    all_records = existing + manifest
+    with open(manifest_path, "w") as f:
+        json.dump(all_records, f, indent=2)
+    print(f"\n── Fatto: +{len(manifest)} nuovi crop, {len(all_records)} totali in {args.out}/  (manifest.json)")
 
 
 if __name__ == "__main__":

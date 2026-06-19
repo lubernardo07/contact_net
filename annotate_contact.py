@@ -49,6 +49,8 @@ class Annotator:
         self.imgrow.pack()
         self.lbl_ctx  = tk.Label(self.imgrow, bg="#222")
         self.lbl_ctx.pack(side="left", padx=8)
+        self.lbl_zoom = tk.Label(self.imgrow, bg="#222")
+        self.lbl_zoom.pack(side="left", padx=8)
         self.lbl_crop = tk.Label(self.imgrow, bg="#222")
         self.lbl_crop.pack(side="left", padx=8)
         self.help = tk.Label(
@@ -92,6 +94,7 @@ class Annotator:
         if self.idx >= len(self.manifest):
             self.info.config(text="── Tutto annotato! Premi [q] per salvare ed uscire.")
             self.lbl_ctx.config(image="")
+            self.lbl_zoom.config(image="")
             self.lbl_crop.config(image="")
             return
         rec = self.manifest[self.idx]
@@ -102,9 +105,11 @@ class Annotator:
             f"etichettati: {len(self.labels)}  (contatto {n_c} / no {n_n})  skip {len(self.skips)}\n"
             f"  video: {rec['video']}   frame: {rec['frame_idx']}   tool: {rec['tool_type']}"
         ))
-        ctx  = self._load_img(rec["context"], 640)   # context nativo ~640 → nitido
-        crop = self._load_img(rec["crop"], 300)       # crop 224 → ingrandimento moderato
+        ctx  = self._load_img(rec["context"], 820)    # frame intero (ora generato a 1280) → nitido
+        zoom = self._load_img(rec["zoom"], 420) if rec.get("zoom") else None  # vista locale nativa
+        crop = self._load_img(rec["crop"], 300)        # crop 224 (input modello) → riferimento
         self.lbl_ctx.config(image=ctx if ctx else "")
+        self.lbl_zoom.config(image=zoom if zoom else "")
         self.lbl_crop.config(image=crop if crop else "")
 
     # ── azioni ───────────────────────────────────────────────────────────────
