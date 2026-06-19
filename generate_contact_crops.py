@@ -24,6 +24,7 @@ Uso:
 import argparse
 import json
 import os
+import random
 import sys
 
 import cv2
@@ -76,6 +77,9 @@ def main():
     ap.add_argument("--out", default="contact_data")
     ap.add_argument("--frames_per_video", type=int, default=10)
     ap.add_argument("--max_videos", type=int, default=0, help="0 = tutti")
+    ap.add_argument("--max_crops_per_video", type=int, default=0,
+                    help="tetto di crop NUOVI per video (0 = nessun tetto). I frame vengono "
+                         "mescolati (deterministico per video) così i crop tenuti sono sparsi nel video.")
     ap.add_argument("--crop_size", type=int, default=224)
     ap.add_argument("--zoom_size", type=int, default=384,
                     help="vista locale (nativa, non ingrandita) attorno alla punta, per annotare a occhio")
@@ -125,9 +129,14 @@ def main():
         n_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT)) or 0
         ann   = _annotated_frames(labels_dir, stem)
         idxs  = _sample_indices(n_frames, ann, args.frames_per_video)
+        if args.max_crops_per_video:
+            random.Random(stem).shuffle(idxs)   # crop sparsi nel video, deterministico per video
 
         n_before = len(manifest)
+        n_new_video = 0
         for fidx in idxs:
+            if args.max_crops_per_video and n_new_video >= args.max_crops_per_video:
+                break
             cap.set(cv2.CAP_PROP_POS_FRAMES, fidx)
             ret, frame = cap.read()
             if not ret:
@@ -179,6 +188,9 @@ def main():
                     "tool_type":  CFG["class_names"].get(det["class"], str(det["class"])),
                     "tip":        [int(tip[0]), int(tip[1])],
                 })
+                n_new_video += 1
+                if args.max_crops_per_video and n_new_video >= args.max_crops_per_video:
+                    break
         cap.release()
         print(f"  [{vi+1}/{len(vids)}] {stem}: +{len(manifest)-n_before} crop  (tot {len(manifest)})")
 
