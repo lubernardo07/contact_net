@@ -42,7 +42,7 @@ def main():
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Device: {device}")
 
-    ck = torch.load(args.net, map_location=device)
+    ck = torch.load(args.net, map_location=device, weights_only=False)  # checkpoint nostro (contiene scalari numpy)
     mean = ck.get("mean", [0.485, 0.456, 0.406])
     std  = ck.get("std",  [0.229, 0.224, 0.225])
     model = resnet18(weights=None)
