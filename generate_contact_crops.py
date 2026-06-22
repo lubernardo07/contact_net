@@ -39,6 +39,7 @@ from config import CFG                          # noqa: E402
 from models.loader import load_models           # noqa: E402
 from processing.yolo_utils import run_yolo       # noqa: E402
 from pipeline_B import extract_tool_tip, crop_around_point  # noqa: E402
+from pipeline_A import _box_iou                  # noqa: E402
 
 
 def _annotated_frames(labels_dir: str, stem: str) -> list:
@@ -143,8 +144,23 @@ def main():
                 continue
             H, W = frame.shape[:2]
             dets = run_yolo(yolo, frame)
+            # Fallback OOD (come il seeding in pipeline_A): su dataset dove YOLO etichetta
+            # lo strumento col VERBO (classi 8-14) e non col tipo (0-7), le box-verbo
+            # localizzano comunque lo strumento → generiamo il crop, deducendo il tipo da
+            # tti_verb_to_tool. Si saltano le box-verbo già coperte da una box-strumento.
+            verb2tool = CFG.get("tti_verb_to_tool", {})
+            use_tti   = CFG.get("seed_tools_from_tti", True) and bool(verb2tool)
+            tool_boxes = [d["box"] for d in dets if d["class"] in CFG["tool_classes"]]
             for di, det in enumerate(dets):
-                if det["class"] not in CFG["tool_classes"]:
+                cls = det["class"]
+                if cls in CFG["tool_classes"]:
+                    tool_type = CFG["class_names"].get(cls, str(cls))
+                elif use_tti and cls in verb2tool:
+                    box = det.get("box")
+                    if box is not None and any(_box_iou(box, tb) > 0.3 for tb in tool_boxes):
+                        continue                       # già coperto da una box-strumento
+                    tool_type = CFG["class_names"].get(verb2tool[cls], str(verb2tool[cls]))
+                else:
                     continue
                 m = det.get("mask")
                 if m is None:
@@ -185,7 +201,7 @@ def main():
                     "context":    f"context/{rid}.jpg",
                     "video":      stem,
                     "frame_idx":  fidx,
-                    "tool_type":  CFG["class_names"].get(det["class"], str(det["class"])),
+                    "tool_type":  tool_type,
                     "tip":        [int(tip[0]), int(tip[1])],
                 })
                 n_new_video += 1
