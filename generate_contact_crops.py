@@ -149,8 +149,10 @@ def main():
             # localizzano comunque lo strumento → generiamo il crop, deducendo il tipo da
             # tti_verb_to_tool. Si saltano le box-verbo già coperte da una box-strumento.
             verb2tool = CFG.get("tti_verb_to_tool", {})
-            use_tti   = CFG.get("seed_tools_from_tti", True) and bool(verb2tool)
             tool_boxes = [d["box"] for d in dets if d["class"] in CFG["tool_classes"]]
+            # Fallback verbo→strumento SOLO se YOLO non ha dato alcuna box-tool nel frame
+            # (rescue OOD); se ci sono box-tool, gli strumenti sono già coperti da quelle.
+            use_tti = CFG.get("seed_tools_from_tti", True) and bool(verb2tool) and not tool_boxes
             for di, det in enumerate(dets):
                 cls = det["class"]
                 if cls in CFG["tool_classes"]:
