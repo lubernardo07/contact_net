@@ -26,6 +26,7 @@ import random
 import numpy as np
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 from PIL import Image
 from torch.utils.data import DataLoader, Dataset
 from torchvision import transforms
@@ -134,6 +135,10 @@ def main():
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--workers", type=int, default=0,
                     help="worker DataLoader; 0 evita errori di shared memory nei container")
+    ap.add_argument("--dropout", type=float, default=0.3,
+                    help="dropout prima della testa (via forward-hook: non cambia lo state_dict)")
+    ap.add_argument("--patience", type=int, default=8,
+                    help="early stopping: ferma se la balanced accuracy non migliora da N epoche")
     ap.add_argument("--out", default="checkpoints/contact_resnet18.pt")
     args = ap.parse_args()
 
@@ -164,6 +169,13 @@ def main():
         print(f"ResNet18: pesi random (no pretrained: {e})")
         model = resnet18(weights=None)
     model.fc = nn.Linear(model.fc.in_features, 2)
+    # Dropout prima della testa via forward-hook: regolarizza SENZA cambiare le chiavi dello
+    # state_dict (resta fc.weight/fc.bias) → i loader di inferenza caricano senza modifiche.
+    if args.dropout > 0:
+        def _drop_hook(module, inp):
+            return (F.dropout(inp[0], p=args.dropout, training=module.training),)
+        model.fc.register_forward_pre_hook(_drop_hook)
+        print(f"Dropout testa: {args.dropout} (forward-hook)")
     model.to(device)
 
     # Loss pesata (inverso frequenza) per lo sbilanciamento
@@ -172,9 +184,11 @@ def main():
     print(f"Pesi classe [no_contact, contact]: {w.tolist()}")
     criterion = nn.CrossEntropyLoss(weight=w)
     optim = torch.optim.Adam(model.parameters(), lr=args.lr, weight_decay=1e-4)
+    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optim, T_max=args.epochs)
 
     os.makedirs(os.path.dirname(args.out) or ".", exist_ok=True)
     best_bal = -1.0
+    no_improve = 0
     for ep in range(1, args.epochs + 1):
         model.train()
         tot_loss = 0.0
@@ -193,11 +207,19 @@ def main():
         flag = ""
         if bal > best_bal:
             best_bal = bal
+            no_improve = 0
             torch.save({"state_dict": model.state_dict(), "bal_acc": bal,
                         "label2idx": LABEL2IDX, "mean": _MEAN, "std": _STD}, args.out)
             flag = "  ← best (salvato)"
-        print(f"[{ep:02d}/{args.epochs}] loss={tot_loss:.4f}  bal_acc={bal:.3f}  "
+        else:
+            no_improve += 1
+        lr_now = optim.param_groups[0]["lr"]
+        print(f"[{ep:02d}/{args.epochs}] lr={lr_now:.2e} loss={tot_loss:.4f}  bal_acc={bal:.3f}  "
               f"contact P={pc:.2f} R={rc:.2f}  no_contact P={pn:.2f} R={rn:.2f}{flag}")
+        scheduler.step()
+        if no_improve >= args.patience:
+            print(f"\nEarly stopping: balanced accuracy ferma da {args.patience} epoche (best {best_bal:.3f}).")
+            break
 
     print(f"\nMatrice confusione finale (righe=vero, colonne=pred) [no_contact, contact]:\n{cm}")
     print(f"Miglior balanced accuracy: {best_bal:.3f}  → {args.out}")
